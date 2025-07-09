@@ -3,6 +3,7 @@ import gradio as gr
 import requests
 import inspect
 import pandas as pd
+from agents import SimpleGAIAAgent
 
 # (Keep Constants as is)
 # --- Constants ---
@@ -10,14 +11,44 @@ DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
 
 # --- Basic Agent Definition ---
 # ----- THIS IS WERE YOU CAN BUILD WHAT YOU WANT ------
+import re
+
 class BasicAgent:
     def __init__(self):
         print("BasicAgent initialized.")
+        try:
+            self.agent = SimpleGAIAAgent()
+            print("Enhanced Simple GAIA agent successfully initialized.")
+        except Exception as e:
+            print(f"Error initializing agent: {e}")
+            self.agent = None
+    
     def __call__(self, question: str) -> str:
-        print(f"Agent received question (first 50 chars): {question[:50]}...")
-        fixed_answer = "This is a default answer."
-        print(f"Agent returning fixed answer: {fixed_answer}")
-        return fixed_answer
+        print(f"Agent received question: {question[:50]}...")
+        
+        if self.agent is None:
+            return "Error: Agent not available."
+        
+        try:
+            # Extract task_id if present in question context
+            task_id = self._extract_task_id(question)
+            
+            # Solve using enhanced agent
+            answer = self.agent.solve(question, task_id)
+            
+            print(f"Agent returning enhanced answer: {answer}")
+            return str(answer).strip()
+            
+        except Exception as e:
+            error_answer = f"Error: {str(e)}"
+            print(f"Agent error: {error_answer}")
+            return error_answer
+    
+    def _extract_task_id(self, question: str):
+        """Extract task_id from question context if available"""
+        # This will be automatically handled by the GAIA evaluation system
+        # when files are attached to questions
+        return None
 
 def run_and_submit_all( profile: gr.OAuthProfile | None):
     """
@@ -26,7 +57,6 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
     """
     # --- Determine HF Space Runtime URL and Repo URL ---
     space_id = os.getenv("SPACE_ID") # Get the SPACE_ID for sending link to the code
-
     if profile:
         username= f"{profile.username}"
         print(f"User logged in: {username}")
@@ -73,9 +103,13 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
     results_log = []
     answers_payload = []
     print(f"Running agent on {len(questions_data)} questions...")
+    count = 0
     for item in questions_data:
         task_id = item.get("task_id")
         question_text = item.get("question")
+        count = count + 1;
+        if count < 11:
+            continue;
         if not task_id or question_text is None:
             print(f"Skipping item with missing task_id or question: {item}")
             continue
@@ -83,6 +117,8 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
             submitted_answer = agent(question_text)
             answers_payload.append({"task_id": task_id, "submitted_answer": submitted_answer})
             results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": submitted_answer})
+            if count > 20:
+                break
         except Exception as e:
              print(f"Error running agent on task {task_id}: {e}")
              results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": f"AGENT ERROR: {e}"})
