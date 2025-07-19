@@ -3,14 +3,24 @@ import gradio as gr
 import requests
 import inspect
 import pandas as pd
+from dotenv import load_dotenv
 from agents import SimpleGAIAAgent
+
+# Load environment variables from .env file
+load_dotenv()
 
 # (Keep Constants as is)
 # --- Constants ---
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
 
 # --- Basic Agent Definition ---
-# ----- THIS IS WERE YOU CAN BUILD WHAT YOU WANT ------
+# ----- THIS IS WHERE YOU CAN BUILD WHAT YOU WANT ------
+# 
+# TESTING MODE: Currently set to process only the LAST 5 questions to save LLM costs
+# To switch to FULL EVALUATION MODE: 
+# 1. Change "test_questions = questions_data[-5:]" to "test_questions = questions_data"
+# 2. Update the print statement accordingly
+#
 import re
 
 class BasicAgent:
@@ -75,8 +85,11 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
         print(f"Error instantiating agent: {e}")
         return f"Error initializing agent: {e}", None
     # In the case of an app running as a hugging Face space, this link points toward your codebase ( usefull for others so please keep it public)
-    agent_code = f"https://huggingface.co/spaces/{space_id}/tree/main"
-    print(agent_code)
+    if space_id:
+        agent_code = f"https://huggingface.co/spaces/{space_id}/tree/main"
+    else:
+        agent_code = "https://github.com/your-repo/your-agent"  # Fallback for local testing
+    print(f"Agent code location: {agent_code}")
 
     # 2. Fetch Questions
     print(f"Fetching questions from: {questions_url}")
@@ -102,23 +115,28 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
     # 3. Run your Agent
     results_log = []
     answers_payload = []
-    print(f"Running agent on {len(questions_data)} questions...")
+    
+    # FULL EVALUATION MODE: Process ALL questions for final submission
+    # Previously was: questions_data[-5:] for testing only last 5 questions
+    test_questions = questions_data  # Process ALL questions
+    print(f"FULL EVALUATION MODE: Running agent on ALL {len(test_questions)} questions...")
+    
     count = 0
-    for item in questions_data:
+    for item in test_questions:
         task_id = item.get("task_id")
         question_text = item.get("question")
-        count = count + 1;
-        if count < 11:
-            continue;
+        count = count + 1
+        
         if not task_id or question_text is None:
             print(f"Skipping item with missing task_id or question: {item}")
             continue
+        
         try:
+            print(f"Processing question {count}/{len(test_questions)}: {task_id}")
             submitted_answer = agent(question_text)
             answers_payload.append({"task_id": task_id, "submitted_answer": submitted_answer})
             results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": submitted_answer})
-            if count > 20:
-                break
+                
         except Exception as e:
              print(f"Error running agent on task {task_id}: {e}")
              results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": f"AGENT ERROR: {e}"})
